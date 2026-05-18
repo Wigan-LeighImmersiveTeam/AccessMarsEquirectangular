@@ -11,7 +11,7 @@ timeout /t 8 /nobreak >nul
 echo Opening controller window...
 start "" "http://localhost:3002"
 
-timeout /t 6 /nobreak >nul
+timeout /t 10 /nobreak >nul
 
 echo Opening CAVE output window...
 start "" "http://localhost:3002/?caveOutput=1"

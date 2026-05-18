@@ -39,10 +39,11 @@ AFRAME.registerComponent('equirectangular-output', {
 
     var geometry = new this.THREE.PlaneBufferGeometry(2, 2);
 
-    var material = new this.THREE.ShaderMaterial({
+    this.material = new this.THREE.ShaderMaterial({
       uniforms: {
-        cubemap: { value: this.cubeCamera.renderTarget.texture }
-      },
+  cubemap: { value: this.cubeCamera.renderTarget.texture },
+  yawOffset: { value: 0.0 }
+},
       vertexShader: [
         'varying vec2 vUv;',
         'void main() {',
@@ -54,11 +55,12 @@ AFRAME.registerComponent('equirectangular-output', {
         'precision highp float;',
         'varying vec2 vUv;',
         'uniform samplerCube cubemap;',
+'uniform float yawOffset;',
         '',
         'const float PI = 3.14159265358979323846264;',
         '',
         'void main() {',
-        '  float longitude = (vUv.x * 2.0 - 1.0) * PI;',
+        '  float longitude = ((vUv.x * 2.0 - 1.0) * PI) + yawOffset;',
         '  float latitude = (vUv.y - 0.5) * PI;',
         '',
         '  vec3 dir;',
@@ -73,7 +75,7 @@ AFRAME.registerComponent('equirectangular-output', {
       depthTest: false
     });
 
-    this.quad = new this.THREE.Mesh(geometry, material);
+    this.quad = new this.THREE.Mesh(geometry, this.material);
     this.quadScene.add(this.quad);
 
     window.addEventListener('keydown', function (event) {
@@ -119,7 +121,19 @@ AFRAME.registerComponent('equirectangular-output', {
 
     this.cubeCamera.updateCubeMap(renderer, sceneEl.object3D);
 
-    renderer.autoClear = true;
+if (this.latestSyncData && this.material && this.material.uniforms.yawOffset) {
+  var yaw = -(this.latestSyncData.cameraRotation.y || 0);
+
+// Small correction for the first landing site.
+// Positive moves the centre one way, negative moves it the other.
+if (this.latestSyncData.site === 'landing_site') {
+  yaw -= 1.0;
+}
+
+this.material.uniforms.yawOffset.value = yaw;
+}
+
+renderer.autoClear = true;
     renderer.clear();
     renderer.render(this.quadScene, this.quadCamera);
   },
