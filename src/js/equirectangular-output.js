@@ -13,6 +13,7 @@ AFRAME.registerComponent('equirectangular-output', {
     this.enabledOutput = false;
     this.latestSyncData = null;
     this.lastRequestedSite = null;
+    this.loadingLabelHideAt = Date.now() + 4000;
 
     this.outputWidth = 4096;
     this.outputHeight = 2048;
@@ -41,9 +42,9 @@ AFRAME.registerComponent('equirectangular-output', {
 
     this.material = new this.THREE.ShaderMaterial({
       uniforms: {
-  cubemap: { value: this.cubeCamera.renderTarget.texture },
-  yawOffset: { value: 0.0 }
-},
+        cubemap: { value: this.cubeCamera.renderTarget.texture },
+        yawOffset: { value: 0.0 }
+      },
       vertexShader: [
         'varying vec2 vUv;',
         'void main() {',
@@ -55,7 +56,7 @@ AFRAME.registerComponent('equirectangular-output', {
         'precision highp float;',
         'varying vec2 vUv;',
         'uniform samplerCube cubemap;',
-'uniform float yawOffset;',
+        'uniform float yawOffset;',
         '',
         'const float PI = 3.14159265358979323846264;',
         '',
@@ -115,39 +116,62 @@ AFRAME.registerComponent('equirectangular-output', {
 
     if (!renderer || !activeCamera) return;
 
+    this.updateCaveLoadingLabel();
+
     activeCamera.updateMatrixWorld();
 
     this.cubeCamera.position.setFromMatrixPosition(activeCamera.matrixWorld);
-
     this.cubeCamera.updateCubeMap(renderer, sceneEl.object3D);
 
-if (this.latestSyncData && this.material && this.material.uniforms.yawOffset) {
-  var yaw = -(this.latestSyncData.cameraRotation.y || 0);
+    if (this.latestSyncData && this.material && this.material.uniforms.yawOffset) {
+      var yaw = -(this.latestSyncData.cameraRotation.y || 0);
 
-// Small correction for the first landing site.
-// Positive moves the centre one way, negative moves it the other.
-if (this.latestSyncData.site === 'landing_site') {
-  yaw -= 1.0;
-}
+      // First location has a different starting alignment.
+      if (this.latestSyncData.site === 'landing_site') {
+        yaw -= 1.0;
+      }
 
-this.material.uniforms.yawOffset.value = yaw;
-}
+      this.material.uniforms.yawOffset.value = yaw;
+    }
 
-renderer.autoClear = true;
+    renderer.autoClear = true;
     renderer.clear();
     renderer.render(this.quadScene, this.quadCamera);
   },
 
   getCurrentSiteName: function () {
-    if (Scene.nextSite) {
-      return Scene.nextSite;
-    }
-
-    if (Scene.currentSite) {
-      return Scene.currentSite;
-    }
-
+    if (Scene.nextSite) return Scene.nextSite;
+    if (Scene.currentSite) return Scene.currentSite;
     return null;
+  },
+
+  getInfoCardState: function () {
+    var el = document.querySelector('#info-card');
+
+    if (!el || !el.components || !el.components['info-card']) {
+      return null;
+    }
+
+    return {
+      visible: el.getAttribute('visible'),
+      isVisibleState: el.is('visible'),
+      data: Object.assign({}, el.components['info-card'].data)
+    };
+  },
+
+  getEntitySyncState: function (selector) {
+    var el = document.querySelector(selector);
+
+    if (!el) {
+      return null;
+    }
+
+    return {
+      selector: selector,
+      visible: el.getAttribute('visible'),
+      isVisibleState: el.is('visible'),
+      innerHTML: el.innerHTML
+    };
   },
 
   broadcastNormalView: function (playerEl, cameraEl) {
@@ -163,6 +187,10 @@ renderer.autoClear = true;
       site: this.getCurrentSiteName(),
       currentSite: Scene.currentSite || null,
       nextSite: Scene.nextSite || null,
+
+      infoCard: this.getInfoCardState(),
+      mapCard: this.getEntitySyncState('#map-card'),
+      orientationCard: this.getEntitySyncState('#orientation-card'),
 
       playerPosition: {
         x: playerPos.x,
@@ -187,15 +215,93 @@ renderer.autoClear = true;
     });
   },
 
+  applyInfoCardSync: function (state) {
+    var el = document.querySelector('#info-card');
+
+    if (!el || !el.components || !el.components['info-card']) {
+      return;
+    }
+
+    if (!state) {
+      el.setAttribute('visible', false);
+      el.removeState('visible');
+      return;
+    }
+
+    if (state.data) {
+      el.setAttribute('info-card', state.data);
+    }
+
+    if (typeof state.visible !== 'undefined') {
+      el.setAttribute('visible', state.visible);
+    }
+
+    if (state.isVisibleState) {
+      el.addState('visible');
+    } else {
+      el.removeState('visible');
+    }
+  },
+
+  applyEntitySync: function (state) {
+    if (!state || !state.selector) return;
+
+    var el = document.querySelector(state.selector);
+
+    if (!el) return;
+
+    if (typeof state.visible !== 'undefined') {
+      el.setAttribute('visible', state.visible);
+    }
+
+    if (state.isVisibleState) {
+      if (!el.is('visible')) {
+        el.addState('visible');
+      }
+    } else {
+      if (el.is('visible')) {
+        el.removeState('visible');
+      }
+    }
+
+    if (typeof state.innerHTML === 'string' && el.innerHTML !== state.innerHTML) {
+      el.innerHTML = state.innerHTML;
+    }
+
+    el.object3D.visible = state.visible !== false;
+  },
+
+  updateCaveLoadingLabel: function () {
+    if (!this.isCaveOutput) return;
+
+    var loadingLabel = document.querySelector('#scene-label-intro');
+
+    if (!loadingLabel) return;
+
+    if (Date.now() > this.loadingLabelHideAt) {
+      loadingLabel.setAttribute('visible', false);
+      loadingLabel.object3D.visible = false;
+    }
+  },
+
   applyCaveSync: function (playerEl, cameraEl) {
     if (!this.latestSyncData) return;
 
     var d = this.latestSyncData;
 
+    this.applyInfoCardSync(d.infoCard);
+    this.applyEntitySync(d.mapCard);
+    this.applyEntitySync(d.orientationCard);
+
     if (d.site && d.site !== Scene.currentSite && d.site !== this.lastRequestedSite) {
       console.log('[EquirectangularOutput] Changing CAVE site to:', d.site);
       this.lastRequestedSite = d.site;
+
       Scene.onClickScene(d.site);
+
+      // Allow the loading label briefly, then force-hide it again.
+      this.loadingLabelHideAt = Date.now() + 4000;
+
       return;
     }
 
