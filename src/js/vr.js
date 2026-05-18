@@ -61,6 +61,7 @@ require( './components/sky-wireframe' );
 require( './components/sky-gradient' );
 require( './components/sky-blackout' );
 require( './utils/compatibility' );
+require('./equirectangular-output');
 
 import { initSplash } from './splash/splash';
 import { testCompatibility } from './utils/compatibility';
