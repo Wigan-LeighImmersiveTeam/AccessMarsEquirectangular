@@ -1,4 +1,8 @@
 # Access Mars
+
+This is an edited version of the original google repo, that outputs an equirectangular image for use in immersive rooms. 
+
+
 [Access Mars](https://accessmars.withgoogle.com) is a collaboration between NASA, Jet Propulsion Lab, and Google Creative Lab to bring the real surface of Mars to your browser. It is an open source project released as a [WebVR Experiment](http://webvrexperiments.com).
 
 ![alt text](https://accessmars.withgoogle.com/img/fbshare.jpg "Access Mars")
